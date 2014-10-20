@@ -10,49 +10,59 @@ import (
 	"strconv"
 )
 
-type TwApi struct {
-	Api  anaconda.TwitterApi
+// TwAPI has Api object and target user
+type TwAPI struct {
+	API  anaconda.TwitterApi
 	User string
 }
 
+// Friends is slice of User
 type Friends []anaconda.User
 
+// FriendCursor has Friends and next cursor
 type FriendCursor struct {
-	Friends         Friends
-	Next_cursor_str string
+	Friends       Friends
+	NextCursorStr string
 }
 
+// Ids is slice of id
 type Ids []int64
 
-type IdCursor struct {
-	ids             Ids
-	Next_cursor_str string
+// IDCursor has Ids and next cursor
+type IDCursor struct {
+	ids           Ids
+	NextCursorStr string
 }
 
+// FriendsMap is map. Key is id, value is User
 type FriendsMap map[int64]anaconda.User
 
+// Following has following screenName and follower screenName
 type Following struct {
 	following string
 	follower  string
 }
 
+// FollowingList is slice of Following
 type FollowingList []Following
 
-func (twa TwApi) Friends(next_cursor string) FriendCursor {
-	v := url.Values{"screen_name": {twa.User}, "cursor": {next_cursor}, "count": {"200"}}
-	cursor, err := twa.Api.GetFriendsList(v)
+// Friends returns friend list by specified cursor
+func (twa TwAPI) Friends(cursor string) FriendCursor {
+	v := url.Values{"screen_name": {twa.User}, "cursor": {cursor}, "count": {"200"}}
+	c, err := twa.API.GetFriendsList(v)
 	if err != nil {
 		panic(err)
 	}
-	return FriendCursor{cursor.Users, cursor.Next_cursor_str}
+	return FriendCursor{c.Users, c.Next_cursor_str}
 }
 
-func (twa TwApi) AllFriends() Friends {
+// AllFriends returns all friend list
+func (twa TwAPI) AllFriends() Friends {
 	friends := Friends{}
 
 	for next := "-1"; ; {
 		fc := twa.Friends(next)
-		next = fc.Next_cursor_str
+		next = fc.NextCursorStr
 		friends = append(friends, fc.Friends...)
 		if next == "0" {
 			break
@@ -62,13 +72,15 @@ func (twa TwApi) AllFriends() Friends {
 	return friends
 }
 
-func (twa TwApi) FriendIds(next_cursor string) (IdCursor, error) {
-	v := url.Values{"screen_name": {twa.User}, "cursor": {next_cursor}, "count": {"5000"}}
-	cursor, err := twa.Api.GetFriendsIds(v)
-	return IdCursor{cursor.Ids, cursor.Next_cursor_str}, err
+// FriendIds returns friend id list by specified cursor
+func (twa TwAPI) FriendIds(cursor string) (IDCursor, error) {
+	v := url.Values{"screen_name": {twa.User}, "cursor": {cursor}, "count": {"5000"}}
+	c, err := twa.API.GetFriendsIds(v)
+	return IDCursor{c.Ids, c.Next_cursor_str}, err
 }
 
-func (twa TwApi) AllFriendIds() Ids {
+// AllFriendIds returns all friend id list
+func (twa TwAPI) AllFriendIds() Ids {
 	friendIds := Ids{}
 
 	for next := "-1"; ; {
@@ -83,7 +95,7 @@ func (twa TwApi) AllFriendIds() Ids {
 		if err != nil {
 			panic(err)
 		}
-		next = ic.Next_cursor_str
+		next = ic.NextCursorStr
 		friendIds = append(friendIds, ic.ids...)
 		if next == "0" {
 			break
@@ -93,7 +105,8 @@ func (twa TwApi) AllFriendIds() Ids {
 	return friendIds
 }
 
-func MakeFriendsMap(friends Friends) FriendsMap {
+// NewFriendsMap returns FriendsMap from Friends
+func NewFriendsMap(friends Friends) FriendsMap {
 	fmap := make(FriendsMap)
 	for _, friend := range friends {
 		fmap[friend.Id] = friend
@@ -101,6 +114,7 @@ func MakeFriendsMap(friends Friends) FriendsMap {
 	return fmap
 }
 
+// SaveFriends saves friend list to csv
 func SaveFriends(userName string, friends Friends) error {
 	fout, err := os.OpenFile(userName+".csv", os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -150,7 +164,8 @@ func SaveFriends(userName string, friends Friends) error {
 	return err
 }
 
-func MutualFriends(fmap FriendsMap, ids Ids) Friends {
+// SpecifiedFriends returns friends only in FriendsMap and Ids
+func SpecifiedFriends(fmap FriendsMap, ids Ids) Friends {
 	friends := Friends{}
 	for _, id := range ids {
 		if friend, ok := fmap[id]; ok {
@@ -160,9 +175,8 @@ func MutualFriends(fmap FriendsMap, ids Ids) Friends {
 	return friends
 }
 
-func CreateMutualList(following string, friendsMap FriendsMap, ids Ids) FollowingList {
-	followers := MutualFriends(friendsMap, ids)
-
+// NewFollowingList returns FollowingList by following and followers
+func NewFollowingList(following string, followers Friends) FollowingList {
 	fList := FollowingList{}
 	for _, follower := range followers {
 		fList = append(fList, Following{following, follower.ScreenName})
@@ -170,6 +184,7 @@ func CreateMutualList(following string, friendsMap FriendsMap, ids Ids) Followin
 	return fList
 }
 
+// SaveFollowingList saves following list to csv
 func SaveFollowingList(userName string, fList FollowingList) error {
 	fout, err := os.OpenFile(userName+"_following_list.csv", os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -196,14 +211,14 @@ func SaveFollowingList(userName string, fList FollowingList) error {
 	return err
 }
 
-type ApiKey struct {
+type apiKey struct {
 	ConsumerKey    string
 	ConsumerSecret string
 	AccessToken    string
 	AccessSecret   string
 }
 
-func LoadApiKey() ApiKey {
+func loadAPIKey() apiKey {
 	file, err := os.Open("APIKEY.txt")
 	if err != nil {
 		panic(err)
@@ -215,7 +230,7 @@ func LoadApiKey() ApiKey {
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-	return ApiKey{
+	return apiKey{
 		lines[0],
 		lines[1],
 		lines[2],
@@ -224,18 +239,18 @@ func LoadApiKey() ApiKey {
 }
 
 func main() {
-	apiKey := LoadApiKey()
+	apiKey := loadAPIKey()
 	anaconda.SetConsumerKey(apiKey.ConsumerKey)
 	anaconda.SetConsumerSecret(apiKey.ConsumerSecret)
 	api := anaconda.NewTwitterApi(apiKey.AccessToken, apiKey.AccessSecret)
 	//api.ReturnRateLimitError(true) // TODO: 消す
 
 	userName := os.Args[1]
-	twApi := TwApi{*api, userName}
-	friends := twApi.AllFriends()
-	friendsMap := MakeFriendsMap(friends)
-	fmt.Println(fmt.Sprintf("%sのフォロー数は%d人", twApi.User, len(friends)))
-	err := SaveFriends(twApi.User, friends)
+	twAPI := TwAPI{*api, userName}
+	friends := twAPI.AllFriends()
+	friendsMap := NewFriendsMap(friends)
+	fmt.Println(fmt.Sprintf("%sのフォロー数は%d人", twAPI.User, len(friends)))
+	err := SaveFriends(twAPI.User, friends)
 	if err != nil {
 		panic(err)
 	}
@@ -243,13 +258,14 @@ func main() {
 	followingList := FollowingList{}
 	for _, friend := range friends {
 		fmt.Println(friend.ScreenName)
-		friendApi := TwApi{*api, friend.ScreenName}
-		ids := friendApi.AllFriendIds()
-		mutualList := CreateMutualList(friendApi.User, friendsMap, ids)
-		fmt.Println(fmt.Sprintf("%sと%sが共通にフォローしている人数は%d人", twApi.User, friendApi.User, len(mutualList)))
+		friendAPI := TwAPI{*api, friend.ScreenName}
+		ids := friendAPI.AllFriendIds()
+		followers := SpecifiedFriends(friendsMap, ids)
+		mutualList := NewFollowingList(friendAPI.User, followers)
+		fmt.Println(fmt.Sprintf("%sと%sが共通にフォローしている人数は%d人", twAPI.User, friendAPI.User, len(mutualList)))
 		followingList = append(followingList, mutualList...)
 	}
-	err = SaveFollowingList(twApi.User, followingList)
+	err = SaveFollowingList(twAPI.User, followingList)
 	if err != nil {
 		panic(err)
 	}
